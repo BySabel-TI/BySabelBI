@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🏍️ Shineray Dashboard
 
-## Getting Started
+Dashboard administrativo para gestão de vendas e estoque da Shineray (Região Norte/Nordeste).
+Desenvolvido com **Next.js 14**, **Tailwind CSS**, **Supabase** e integração com **Microwork Cloud**.
 
-First, run the development server:
+![Dashboard Preview](./public/dashboard-preview.png)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Funcionalidades
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Visão Geral**: KPIs de faturamento, vendas e ticket médio.
+- **Ranking de Vendedores**: Acompanhamento em tempo real do desempenho individual.
+- **Análise Comercial**: Tabela detalhada por filial com metas e percentuais de atingimento.
+- **Estoque**: Visualização de disponibilidade de produtos.
+- **Gestão de Metas**: Interface para definição de metas mensais por loja.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🛠️ Tecnologias
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Frontend**: Next.js 14 (App Router), React, TypeScript.
+- **Estilização**: Tailwind CSS, Shadcn/UI (Radix UI).
+- **Gráficos**: Recharts.
+- **Backend/Auth**: Supabase (PostgreSQL + Auth).
+- **Integração**: API Microwork Cloud (via Proxy Route).
 
-## Learn More
+## 📦 Instalação
 
-To learn more about Next.js, take a look at the following resources:
+### Pré-requisitos
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Node.js 18+
+- NPM ou Yarn
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Passos
 
-## Deploy on Vercel
+1.  Clone o repositório:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+    ```bash
+    git clone https://github.com/seu-usuario/shineray-dashboard.git
+    cd shineray-dashboard
+    ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2.  Instale as dependências:
+
+    ```bash
+    npm install
+    ```
+
+3.  Configure as Variáveis de Ambiente:
+    Crie um arquivo `.env.local` na raiz do projeto e adicione as chaves (solicite ao administrador do projeto):
+
+    ```env
+    MICROWORK_TOKEN=seu_token_aqui
+    NEXT_PUBLIC_SUPABASE_URL=sua_url_supabase
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_anon
+    ```
+
+4.  Rode o servidor de desenvolvimento:
+    ```bash
+    npm run dev
+    ```
+    Acesse [http://localhost:3000](http://localhost:3000).
+
+## 🚢 Deploy (Vercel)
+
+Este projeto é otimizado para deploy na [Vercel](https://vercel.com).
+
+1.  Importe o projeto na Vercel.
+2.  Configure as **Environment Variables** (as mesmas do `.env.local`).
+3.  O comando de build padrão (`next build`) será utilizado.
+
+> Veja o guia detalhado em [DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md).
+
+## 📂 Estrutura de Pastas
+
+- `src/app`: Rotas e páginas (App Router).
+- `src/components`: Componentes reutilizáveis (UI, Dashboard, Layout).
+- `src/lib`: Funções utilitárias, formatadores e constantes.
+- `src/services`: Camada de comunicação com APIs.
+- `src/store`: Gerenciamento de estado global (Zustand).
+
+---
+
+Desenvolvido por **Antigravity** para Shineray.
