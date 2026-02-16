@@ -18,11 +18,17 @@ export async function fetchSalesData(startDate: Date, endDate: Date, branchIds: 
 
   const rawData: MicroworkSaleItem[] = await response.json();
   let safeData = Array.isArray(rawData) ? rawData : [];
-  if (safeData.length > 0) {
-    console.log("DEBUG: First item raw:", safeData[0]);
-  }
 
-  // 2. FILTRAGEM EM MEMÓRIA
+
+  // 2. FILTRAGEM DE REGRAS DE NEGÓCIO
+  // Remove "Remessa Entrega Futura" para evitar contagem duplicada (já existe a Venda Entrega Futura)
+  safeData = safeData.filter(item => {
+      const tipo = item.tipomovimento?.toUpperCase() || "";
+      if (tipo.includes("REMESSA ENTREGA FUTURA")) return false;
+      return true;
+  });
+
+  // 3. FILTRAGEM POR FILIAL (Se selecionado)
   if (branchIds.length > 0 && branchIds.length < 20) {
     const targetNames = branchIds.map(id => ID_TO_NORMALIZED_NAME[id]);
     safeData = safeData.filter(item => {
@@ -258,6 +264,13 @@ export async function fetchYearlyComparison(branchIds: number[]) {
   // 3. Combinar Dados
   const rawData = [...(Array.isArray(dataAnoAnterior) ? dataAnoAnterior : []), ...(Array.isArray(dataAnoAtual) ? dataAnoAtual : [])];
   let safeData = rawData;
+
+  // Filtra Remessa Entrega Futura (Regra Global)
+  safeData = safeData.filter(item => {
+      const tipo = item.tipomovimento?.toUpperCase() || "";
+      if (tipo.includes("REMESSA ENTREGA FUTURA")) return false;
+      return true;
+  });
 
   if (branchIds.length > 0 && branchIds.length < 20) {
     const targetNames = branchIds.map(id => ID_TO_NORMALIZED_NAME[id]);

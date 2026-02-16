@@ -26,6 +26,7 @@ export interface MicroworkSaleItem {
   cor?: string;
   anofabrmod?: string;    // ex: "2025/2026"
   tipovenda?: string;     // ex: "CDC"
+  tipomovimento?: string; // ex: "VENDA", "REMESSA ENTREGA FUTURA"
   pessoa?: string;        // Nome do Cliente
   
   // Campos auxiliares de sistema

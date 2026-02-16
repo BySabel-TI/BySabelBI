@@ -65,8 +65,13 @@ export function CommercialAnalysisTable({ data, periodDate }: CommercialAnalysis
 
       const results = await Promise.all(promises);
 
-      // Ordena estritamente por ID (01, 02, 03...)
-      const sorted = results.sort((a, b) => a.id - b.id);
+      // Ordena por Quantidade (Desc), depois Faturamento (Desc) - Solicitado pelo usuário
+      const sorted = results.sort((a, b) => {
+        if (b.qtd !== a.qtd) {
+            return b.qtd - a.qtd;
+        }
+        return b.value - a.value;
+      });
       
       setTableData(sorted);
     } catch (error) {
@@ -119,7 +124,7 @@ export function CommercialAnalysisTable({ data, periodDate }: CommercialAnalysis
        <div className="p-4 border-b border-border bg-background flex justify-between items-start">
           <div>
             <h2 className="text-lg font-bold text-foreground">Análise Comercial</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Detalhes por Loja</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Detalhes por Loja (Ordenado por Qtd)</p>
           </div>
           <Button 
             variant="ghost" 
@@ -155,7 +160,8 @@ export function CommercialAnalysisTable({ data, periodDate }: CommercialAnalysis
                  )}
                >
                  <TableCell className="font-medium text-xs py-1.5 border-r border-border/30 truncate">
-                   {row.name.toUpperCase()}
+                   {/* Remove o ID (ex: "01 - ") para exibição limpa */}
+                   {row.name.replace(/^\d+\s-\s/, '').toUpperCase()}
                  </TableCell>
                  <TableCell className="text-center text-xs py-1.5 border-r border-border/30 font-bold">
                    {row.qtd}
