@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useCallback, type FormEvent } from "react";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -10,6 +10,14 @@ import {
   deleteEmployee,
   importStaticSellers,
 } from "@/services/employees-service";
+import {
+  UnknownSeller,
+  discoverUnknownSellers,
+  bulkRegisterSellers,
+} from "@/services/seller-discovery-service";
+import { fetchSalesData } from "@/services/sales-service";
+import { useFilterStore } from "@/store/useFilterStore";
+import { ALL_BRANCH_IDS } from "@/lib/seller-map";
 import { ID_TO_NORMALIZED_NAME } from "@/lib/seller-map";
 import { cn } from "@/lib/utils";
 import {
@@ -24,6 +32,11 @@ import {
   X,
   Save,
   MapPin,
+  UserPlus,
+  ChevronDown,
+  ChevronUp,
+  CheckSquare,
+  AlertTriangle,
 } from "lucide-react";
 
 // Opções de filial (exclui "99 - Sem Loja")
@@ -37,6 +50,7 @@ const branchName = (id: number | null) =>
 export default function FuncionariosPage() {
   const { user } = useAuth();
   const canManage = user?.role === "admin" || user?.role === "director";
+  const { periodo } = useFilterStore();
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,22 +63,59 @@ export default function FuncionariosPage() {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  async function load() {
+  // Detecção de vendedores desconhecidos
+  const [unknownSellers, setUnknownSellers] = useState<UnknownSeller[]>([]);
+  const [unknownLoading, setUnknownLoading] = useState(false);
+  const [unknownExpanded, setUnknownExpanded] = useState(false);
+  const [selectedUnknown, setSelectedUnknown] = useState<Set<string>>(new Set());
+  const [registering, setRegistering] = useState(false);
+
+  const loadEmployees = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setEmployees(await fetchEmployees());
+      const emps = await fetchEmployees();
+      setEmployees(emps);
+      return emps;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar.");
+      return [];
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  const detectUnknown = useCallback(async (emps: Employee[]) => {
+    setUnknownLoading(true);
+    try {
+      const result = await fetchSalesData(
+        periodo.from,
+        periodo.to,
+        ALL_BRANCH_IDS
+      );
+      const unknown = discoverUnknownSellers(result.rawData, emps);
+      setUnknownSellers(unknown);
+      if (unknown.length > 0) setUnknownExpanded(true);
+    } catch {
+      // Silencioso: se a API falhar, só não mostra a seção.
+      setUnknownSellers([]);
+    } finally {
+      setUnknownLoading(false);
+    }
+  }, [periodo]);
 
   useEffect(() => {
-    if (canManage) load();
-    else setLoading(false);
-  }, [canManage]);
+    if (!canManage) {
+      setLoading(false);
+      return;
+    }
+    (async () => {
+      const emps = await loadEmployees();
+      if (emps.length > 0) {
+        await detectUnknown(emps);
+      }
+    })();
+  }, [canManage, loadEmployees, detectUnknown]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -92,7 +143,8 @@ export default function FuncionariosPage() {
     setIsModalOpen(false);
     setEditing(null);
     setFeedback("Funcionário salvo com sucesso.");
-    await load();
+    const emps = await loadEmployees();
+    await detectUnknown(emps);
   }
 
   async function handleDelete(emp: Employee) {
@@ -101,7 +153,7 @@ export default function FuncionariosPage() {
     try {
       await deleteEmployee(emp.id);
       setFeedback("Funcionário excluído.");
-      await load();
+      await loadEmployees();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao excluir.");
     }
@@ -114,11 +166,67 @@ export default function FuncionariosPage() {
     try {
       const count = await importStaticSellers();
       setFeedback(`Importação concluída: ${count} vendedores.`);
-      await load();
+      const emps = await loadEmployees();
+      await detectUnknown(emps);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao importar.");
     } finally {
       setImporting(false);
+    }
+  }
+
+  // ---- Funções de seleção de vendedores desconhecidos ----
+  function toggleUnknownSelection(name: string) {
+    setSelectedUnknown((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedUnknown.size === unknownSellers.length) {
+      setSelectedUnknown(new Set());
+    } else {
+      setSelectedUnknown(new Set(unknownSellers.map((s) => s.name)));
+    }
+  }
+
+  async function handleRegisterSelected() {
+    const toRegister = unknownSellers.filter((s) => selectedUnknown.has(s.name));
+    if (toRegister.length === 0) return;
+    if (!confirm(`Cadastrar ${toRegister.length} vendedor(es) com a filial inferida?`)) return;
+    setRegistering(true);
+    setError(null);
+    try {
+      const count = await bulkRegisterSellers(toRegister);
+      setFeedback(`${count} vendedor(es) cadastrado(s) com sucesso.`);
+      setSelectedUnknown(new Set());
+      const emps = await loadEmployees();
+      await detectUnknown(emps);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao cadastrar.");
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  async function handleRegisterAll() {
+    if (unknownSellers.length === 0) return;
+    if (!confirm(`Cadastrar TODOS os ${unknownSellers.length} vendedor(es) encontrados?`)) return;
+    setRegistering(true);
+    setError(null);
+    try {
+      const count = await bulkRegisterSellers(unknownSellers);
+      setFeedback(`${count} vendedor(es) cadastrado(s) com sucesso.`);
+      setSelectedUnknown(new Set());
+      const emps = await loadEmployees();
+      await detectUnknown(emps);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao cadastrar.");
+    } finally {
+      setRegistering(false);
     }
   }
 
@@ -191,6 +299,124 @@ export default function FuncionariosPage() {
           </div>
         )}
 
+        {/* ============================================================= */}
+        {/* SEÇÃO: Vendedores Não Cadastrados (Detecção Automática)        */}
+        {/* ============================================================= */}
+        {unknownLoading ? (
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex items-center gap-3 text-sm text-amber-600 dark:text-amber-500">
+            <Loader2 size={16} className="animate-spin" />
+            Analisando dados de vendas para detectar novos vendedores...
+          </div>
+        ) : unknownSellers.length > 0 ? (
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl overflow-hidden">
+            {/* Header colapsável */}
+            <button
+              onClick={() => setUnknownExpanded(!unknownExpanded)}
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-amber-500/5 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <AlertTriangle size={18} className="text-amber-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground text-sm">
+                    {unknownSellers.length} vendedor(es) encontrado(s) nas vendas sem cadastro
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Esses nomes apareceram nos dados da API mas não estão na tabela de funcionários.
+                  </p>
+                </div>
+              </div>
+              {unknownExpanded ? <ChevronUp size={18} className="text-muted-foreground" /> : <ChevronDown size={18} className="text-muted-foreground" />}
+            </button>
+
+            {unknownExpanded && (
+              <div className="border-t border-amber-500/20">
+                {/* Barra de ações */}
+                <div className="flex items-center justify-between p-3 bg-amber-500/5 border-b border-amber-500/10">
+                  <button
+                    onClick={toggleSelectAll}
+                    className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <CheckSquare size={14} />
+                    {selectedUnknown.size === unknownSellers.length ? "Desmarcar todos" : "Selecionar todos"}
+                  </button>
+                  <div className="flex items-center gap-2">
+                    {selectedUnknown.size > 0 && (
+                      <button
+                        onClick={handleRegisterSelected}
+                        disabled={registering}
+                        className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                      >
+                        {registering ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                        Cadastrar selecionados ({selectedUnknown.size})
+                      </button>
+                    )}
+                    <button
+                      onClick={handleRegisterAll}
+                      disabled={registering}
+                      className="flex items-center gap-1.5 bg-shineray-red hover:bg-shineray-red/90 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                    >
+                      {registering ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
+                      Cadastrar todos
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tabela de desconhecidos */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-muted-foreground uppercase bg-muted/30 border-b border-border/50">
+                      <tr>
+                        <th className="px-4 py-2.5 w-10"></th>
+                        <th className="px-4 py-2.5">Nome no ERP</th>
+                        <th className="px-4 py-2.5">Filial Inferida</th>
+                        <th className="px-4 py-2.5 text-center">Vendas</th>
+                        <th className="px-4 py-2.5">Primeira Venda</th>
+                        <th className="px-4 py-2.5">Última Venda</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {unknownSellers.map((seller) => (
+                        <tr
+                          key={seller.name}
+                          className={cn(
+                            "transition-colors cursor-pointer",
+                            selectedUnknown.has(seller.name)
+                              ? "bg-amber-500/10"
+                              : "hover:bg-muted/30"
+                          )}
+                          onClick={() => toggleUnknownSelection(seller.name)}
+                        >
+                          <td className="px-4 py-2.5">
+                            <input
+                              type="checkbox"
+                              checked={selectedUnknown.has(seller.name)}
+                              onChange={() => toggleUnknownSelection(seller.name)}
+                              className="h-4 w-4 rounded border-input accent-amber-500"
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            />
+                          </td>
+                          <td className="px-4 py-2.5 font-medium text-foreground">{seller.rawName}</td>
+                          <td className="px-4 py-2.5">
+                            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                              <MapPin size={12} className="text-amber-500/70" />
+                              {seller.inferredBranch}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-semibold">{seller.salesCount}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground text-xs">{seller.firstSale}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground text-xs">{seller.lastSale}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+
         {/* Busca */}
         <div className="relative md:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -214,7 +440,7 @@ export default function FuncionariosPage() {
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center text-muted-foreground text-sm">
               {employees.length === 0
-                ? "Nenhum funcionário cadastrado. Use “Importar mapeamento atual” para começar."
+                ? "Nenhum funcionário cadastrado. Use \u201cImportar mapeamento atual\u201d para começar."
                 : "Nenhum resultado para a busca."}
             </div>
           ) : (
@@ -351,7 +577,7 @@ function EmployeeModal({
               className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm uppercase focus:ring-2 focus:ring-primary/20 outline-none"
             />
             <p className="text-[11px] text-muted-foreground">
-              Deve casar exatamente com o campo “vendedor” retornado pela API.
+              Deve casar exatamente com o campo &ldquo;vendedor&rdquo; retornado pela API.
             </p>
           </div>
 

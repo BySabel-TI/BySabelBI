@@ -12,6 +12,7 @@ import { ALL_BRANCH_IDS } from "@/lib/seller-map";
 import { cleanSellerName, resolveSellerBranch, aggregateByDay, floorZero } from "@/lib/aggregations";
 import { MicroworkSaleItem } from "@/lib/types-microwork";
 import { formatCurrency } from "@/lib/formatters";
+import { buildBranchHistory, BranchStint } from "@/services/branch-history-service";
 import {
   Loader2,
   ArrowLeft,
@@ -20,6 +21,9 @@ import {
   Package,
   TrendingUp,
   MapPin,
+  History,
+  Calendar,
+  Building2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -109,6 +113,12 @@ export default function SellerDetailPage() {
       dailyChartData,
       topModels,
     };
+  }, [rawData, sellerNameParam]);
+
+  // Histórico de lotação
+  const branchHistory = useMemo(() => {
+    if (!sellerNameParam || rawData.length === 0) return [];
+    return buildBranchHistory(sellerNameParam, rawData);
   }, [rawData, sellerNameParam]);
 
   const initials = sellerNameParam
@@ -223,6 +233,27 @@ export default function SellerDetailPage() {
               </div>
 
             </div>
+
+            {/* ============================================================= */}
+            {/* SEÇÃO: Histórico de Lotação                                    */}
+            {/* ============================================================= */}
+            {branchHistory.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+                <div className="mb-5">
+                  <h3 className="font-bold text-foreground flex items-center gap-2">
+                    <History size={16} className="text-shineray-red" />
+                    Histórico de Lotação
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {branchHistory.length === 1
+                      ? "Filial fixa durante todo o período analisado"
+                      : `Atividade em ${branchHistory.length} filiais no período`}
+                  </p>
+                </div>
+
+                <BranchTimeline stints={branchHistory} />
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground border border-dashed border-border rounded-xl">
@@ -236,5 +267,70 @@ export default function SellerDetailPage() {
 
       </div>
     </main>
+  );
+}
+
+// === Timeline Visual de Lotação ===
+function BranchTimeline({ stints }: { stints: BranchStint[] }) {
+  return (
+    <div className="relative">
+      {/* Linha vertical do timeline */}
+      <div className="absolute left-[18px] top-3 bottom-3 w-0.5 bg-border" />
+
+      <div className="space-y-0">
+        {stints.map((stint, idx) => (
+          <div key={stint.branch} className="relative flex gap-4 pb-6 last:pb-0">
+            {/* Marcador do timeline */}
+            <div className="relative z-10 flex-shrink-0">
+              <div
+                className={`w-[38px] h-[38px] rounded-full flex items-center justify-center border-2 ${
+                  stint.isCurrent
+                    ? "bg-shineray-red border-shineray-red text-white shadow-lg shadow-red-500/20"
+                    : "bg-card border-border text-muted-foreground"
+                }`}
+              >
+                <Building2 size={16} />
+              </div>
+            </div>
+
+            {/* Conteúdo */}
+            <div className={`flex-1 rounded-xl p-4 border transition-all ${
+              stint.isCurrent
+                ? "bg-shineray-red/5 border-shineray-red/20"
+                : "bg-muted/20 border-border/50 hover:bg-muted/40"
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <MapPin size={14} className={stint.isCurrent ? "text-shineray-red" : "text-muted-foreground"} />
+                  <span className="font-semibold text-foreground text-sm">{stint.branch}</span>
+                  {stint.isCurrent && (
+                    <span className="text-[10px] font-bold bg-shineray-red text-white px-2 py-0.5 rounded-full">
+                      ATUAL
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <Package size={12} />
+                    {stint.totalSales} venda(s)
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <DollarSign size={12} />
+                    {formatCurrency(stint.totalRevenue)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+                <Calendar size={12} />
+                <span>{stint.firstSaleLabel}</span>
+                <span className="text-border">→</span>
+                <span>{stint.lastSaleLabel}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
