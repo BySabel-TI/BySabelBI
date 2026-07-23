@@ -32,3 +32,58 @@ export interface MicroworkSaleItem {
   // Campos auxiliares de sistema
   id?: number | string;
 }
+
+// === TIPOS PROCESSADOS (saída das agregações do dashboard) ===
+
+export interface SellerRanking {
+  name: string;
+  filial: string;
+  total: number;
+  qtd: number;
+}
+
+export interface BranchSummary {
+  name: string;
+  value: number;
+  qtd: number;
+  color?: string;
+}
+
+export interface DailyPoint {
+  day: string;
+  vendas: number;
+  valor: number;
+}
+
+export interface ModelRanking {
+  name: string;
+  qtd: number;
+  valor: number;
+}
+
+export interface DashboardKpis {
+  totalFaturamento: number;
+  totalVendas: number;
+  ticketMedio: number;
+  deltaFaturamento?: number; // % MoM vs mês anterior (ex: +12.5 ou -3.2)
+  deltaVendas?: number;      // % MoM vs mês anterior
+  deltaTicketMedio?: number; // % MoM vs mês anterior
+}
+
+export interface DashboardData {
+  kpis: DashboardKpis;
+  rankingVendedores: SellerRanking[];
+  graficoDiario: DailyPoint[];
+  graficoPizza: BranchSummary[];
+  rankingModelos: ModelRanking[];
+  rawData: MicroworkSaleItem[];
+}
+
+export interface MonthlyComparisonPoint {
+  monthIndex: number;
+  monthName: string;
+  anoAtual: number;
+  anoAnterior: number;
+  yearCurrent: number;
+  yearPrev: number;
+}

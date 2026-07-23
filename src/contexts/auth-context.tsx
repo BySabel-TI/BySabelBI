@@ -1,10 +1,11 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { User as DashboardUser, AuthContextType } from "@/types/auth";
+import { User as DashboardUser, AuthContextType, UserRole } from "@/types/auth";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Session } from "@supabase/supabase-js";
+import { loadSellerBranchMap } from "@/services/employees-service";
 
 // Estendemos o tipo User padrão para incluir role do profile
 interface UserProfile extends DashboardUser {
@@ -46,11 +47,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function fetchProfile(session: Session) {
     try {
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", session.user.id)
-        .maybeSingle(); // Usar maybeSingle para não estourar erro se não existir
+      // Carrega em paralelo: perfil do usuário + mapa vendedor→filial (global).
+      const [{ data: profile, error }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .maybeSingle(), // maybeSingle para não estourar erro se não existir
+        loadSellerBranchMap(), // popula o override do seller-map (fallback estático se falhar)
+      ]);
 
       if (error) {
         console.error("Erro Supabase:", error);
@@ -58,15 +63,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Se não tiver perfil ainda (trigger falhou ou delay), usa dados da sessão
-      const finalRole = profile?.role ? (profile.role as any) : "seller";
-      
+      const finalRole = profile?.role ? (profile.role as UserRole) : "seller";
+
       setUser({
         id: session.user.id,
         email: session.user.email!,
         name: profile?.full_name || session.user.user_metadata?.full_name || session.user.email!,
         role: finalRole,
         avatar: profile?.avatar_url || "U",
-        branchId: 0, 
+        branchId: profile?.branch_id ?? undefined,
+        sellerName: profile?.seller_name ?? undefined,
       });
     } catch (error) {
       console.error("Erro ao buscar perfil (Catch):", JSON.stringify(error, null, 2));

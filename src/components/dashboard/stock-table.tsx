@@ -1,6 +1,9 @@
 "use client";
 
-import { Bike, TrendingUp } from "lucide-react";
+import { Bike } from "lucide-react";
+import { ExportButton } from "@/components/ui/export-button";
+import { fileDateSuffix } from "@/lib/export";
+import { formatNumber } from "@/lib/formatters";
 
 interface ModelData {
   name: string;
@@ -13,7 +16,7 @@ interface StockTableProps {
 }
 
 export function StockTable({ data }: StockTableProps) {
-  const fmtBRL = (val: number) => 
+  const fmtBRL = (val: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
 
   if (!data || data.length === 0) {
@@ -22,12 +25,24 @@ export function StockTable({ data }: StockTableProps) {
 
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="p-4 border-b border-border flex justify-between items-center">
+      <div className="p-4 border-b border-border flex justify-between items-center gap-3">
         <h3 className="font-semibold text-foreground flex items-center gap-2">
           <Bike size={18} className="text-shineray-red" />
           Ranking de Modelos (Saída)
         </h3>
-        <span className="text-xs text-muted-foreground">Ordenado por Faturamento</span>
+        <div className="flex items-center gap-3">
+          <span className="hidden sm:inline text-xs text-muted-foreground">Ordenado por Faturamento</span>
+          <ExportButton
+            filename={`ranking-modelos-${fileDateSuffix()}`}
+            rows={data}
+            columns={[
+              { header: "Modelo", accessor: (r) => r.name },
+              { header: "Unidades Vendidas", accessor: (r) => r.qtd },
+              { header: "Preço Médio", accessor: (r) => formatNumber(r.qtd > 0 ? r.valor / r.qtd : 0, { decimals: 2 }) },
+              { header: "Valor Total", accessor: (r) => formatNumber(r.valor, { decimals: 2 }) },
+            ]}
+          />
+        </div>
       </div>
       
       <div className="overflow-x-auto">

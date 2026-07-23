@@ -2,11 +2,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { formatCurrency } from "@/lib/formatters";
+import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { ExportButton } from "@/components/ui/export-button";
+import { fileDateSuffix } from "@/lib/export";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { getStoreGoal } from "@/services/goals-service";
+import { getStoreGoalsMap } from "@/services/goals-service";
 import { cn } from "@/lib/utils";
 import { TrendingUp, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,21 +40,22 @@ export function CommercialAnalysisTable({ data, periodDate }: CommercialAnalysis
   const processData = async () => {
     setLoading(true);
     try {
-      const promises = data.map(async (branch) => {
+      // Busca TODAS as metas do mês numa única query (evita N+1 por filial)
+      let goalsMap: Record<string, { target_units: number; target_amount: number }> = {};
+      try {
+        goalsMap = await getStoreGoalsMap(periodDate);
+      } catch (e) {
+        console.error("Erro ao buscar metas", e);
+      }
+
+      const results = data.map((branch) => {
         // Tenta extrair ID do nome (Ex: "01 - Ananindeua" -> 1)
         const idMatch = branch.name.match(/^(\d+)/);
         const id = idMatch ? parseInt(idMatch[1]) : 999;
 
-        // Busca meta
-        let goalQt = 0;
-        let goalValue = 0;
-        try {
-           const goal = await getStoreGoal(branch.name, periodDate);
-           goalQt = goal.target_units || 0;
-           goalValue = goal.target_amount || 0;
-        } catch (e) {
-           console.error("Erro ao buscar meta", e);
-        }
+        const goal = goalsMap[branch.name] || { target_units: 0, target_amount: 0 };
+        const goalQt = goal.target_units || 0;
+        const goalValue = goal.target_amount || 0;
 
         return {
           ...branch,
@@ -62,8 +65,6 @@ export function CommercialAnalysisTable({ data, periodDate }: CommercialAnalysis
           percentQt: goalQt > 0 ? (branch.qtd / goalQt) * 100 : 0
         };
       });
-
-      const results = await Promise.all(promises);
 
       // Ordena por Quantidade (Desc), depois Faturamento (Desc) - Solicitado pelo usuário
       const sorted = results.sort((a, b) => {
@@ -126,16 +127,30 @@ export function CommercialAnalysisTable({ data, periodDate }: CommercialAnalysis
             <h2 className="text-lg font-bold text-foreground">Análise Comercial</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Detalhes por Loja (Ordenado por Qtd)</p>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" 
-            onClick={handleSync} 
-            disabled={isSyncing}
-            title="Atualizar"
-          >
-             <RefreshCw size={14} className={cn(isSyncing && "animate-spin")} />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ExportButton
+              filename={`analise-comercial-${fileDateSuffix(periodDate)}`}
+              rows={tableData}
+              columns={[
+                { header: "Loja", accessor: (r) => r.name.replace(/^\d+\s-\s/, "") },
+                { header: "Quantidade", accessor: (r) => r.qtd },
+                { header: "Meta (Qtd)", accessor: (r) => r.goalQt },
+                { header: "% Meta Qt", accessor: (r) => (r.goalQt > 0 ? `${r.percentQt.toFixed(0)}%` : "") },
+                { header: "Vl Venda", accessor: (r) => formatNumber(r.value, { decimals: 2 }) },
+                { header: "Vl Meta", accessor: (r) => (r.goalValue > 0 ? formatNumber(r.goalValue, { decimals: 2 }) : "") },
+              ]}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              onClick={handleSync}
+              disabled={isSyncing}
+              title="Atualizar"
+            >
+               <RefreshCw size={14} className={cn(isSyncing && "animate-spin")} />
+            </Button>
+          </div>
        </div>
 
        <div className="flex-1 overflow-auto">

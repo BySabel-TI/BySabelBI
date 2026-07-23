@@ -4,21 +4,21 @@ import React, { createContext, useContext, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  Store, 
-  Users, 
-  Package, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Store,
+  Users,
+  Package,
+  LogOut,
   Settings,
-  BarChart3,
   ChevronRight,
-  Menu,
+  UserCog,
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/auth-context"; 
-import { getUserRoleLabel } from "@/lib/auth-utils"; 
+import { useAuth } from "@/contexts/auth-context";
+import { getUserRoleLabel } from "@/lib/auth-utils";
+import { UserRole } from "@/types/auth";
 
 // --- SIDEBAR CONTEXT FOR MOBILE ---
 type SidebarContextType = {
@@ -49,11 +49,19 @@ export function useSidebar() {
   return context;
 }
 
-const menuItems = [
+type MenuItem = {
+  label: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  roles?: UserRole[]; // se definido, só aparece para esses cargos
+};
+
+const menuItems: MenuItem[] = [
   { label: "Visão Geral", href: "/dashboard/geral", icon: LayoutDashboard },
   { label: "Filiais", href: "/dashboard/filiais", icon: Store },
   { label: "Vendedores", href: "/dashboard/vendedores", icon: Users },
   { label: "Estoque Motos", href: "/dashboard/estoque", icon: Package },
+  { label: "Funcionários", href: "/dashboard/funcionarios", icon: UserCog, roles: ["admin", "director"] },
 ];
 
 export function AppSidebar() {
@@ -108,7 +116,9 @@ export function AppSidebar() {
               Menu Principal
             </div>
             
-            {menuItems.map((item) => {
+            {menuItems
+              .filter((item) => !item.roles || (user?.role && item.roles.includes(user.role)))
+              .map((item) => {
               const isActive = pathname.startsWith(item.href);
               const Icon = item.icon;
 

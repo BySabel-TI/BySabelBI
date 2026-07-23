@@ -66,9 +66,35 @@ export async function upsertGoal(goal: SalesGoal) {
  */
 export async function getStoreGoal(branchId: string, monthDate: Date) {
    const goals = await fetchGoals(monthDate, branchId);
-   
+
    return goals.reduce((acc, curr) => ({
       target_amount: acc.target_amount + (curr.target_amount || 0),
       target_units: acc.target_units + (curr.target_units || 0)
    }), { target_amount: 0, target_units: 0 });
+}
+
+export interface StoreGoalTotals {
+  target_amount: number;
+  target_units: number;
+}
+
+/**
+ * Busca TODAS as metas do mês numa única query e agrupa por filial (branch_id),
+ * somando as metas dos vendedores de cada loja.
+ *
+ * Substitui o padrão N+1 (uma query por filial via getStoreGoal) por uma
+ * chamada só — usado na tabela de Análise Comercial que lista ~24 lojas.
+ */
+export async function getStoreGoalsMap(
+  monthDate: Date
+): Promise<Record<string, StoreGoalTotals>> {
+  const goals = await fetchGoals(monthDate); // sem filtro = todas as filiais
+
+  return goals.reduce((acc, curr) => {
+    const key = curr.branch_id;
+    if (!acc[key]) acc[key] = { target_amount: 0, target_units: 0 };
+    acc[key].target_amount += curr.target_amount || 0;
+    acc[key].target_units += curr.target_units || 0;
+    return acc;
+  }, {} as Record<string, StoreGoalTotals>);
 }

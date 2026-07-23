@@ -5,7 +5,8 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
-  branchId?: number; // Obrigatório se role === 'manager'
+  branchId?: number; // Filial que o gerente enxerga (role === 'manager')
+  sellerName?: string; // Vínculo do vendedor com o nome no ERP (role === 'seller')
   avatar?: string;
 }
 

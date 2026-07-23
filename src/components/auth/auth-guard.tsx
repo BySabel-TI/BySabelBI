@@ -18,7 +18,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
          router.push("/login");
        } else if (user) {
          // Sincroniza permissões com a Store de Filtros
-         setUserAccess(user.role, user.branchId);
+         setUserAccess(user.role, user.branchId, user.sellerName);
        }
     }
   }, [isLoading, isAuthenticated, user, router, setUserAccess]);

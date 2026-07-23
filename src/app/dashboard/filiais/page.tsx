@@ -4,31 +4,45 @@ import { useEffect, useState, useMemo } from "react";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { useFilterStore } from "@/store/useFilterStore";
 import { fetchSalesData } from "@/services/sales-service";
-import { formatCurrency } from "@/lib/formatters";
-import { getBranchBySeller, normalizeBranchName, ID_TO_NORMALIZED_NAME, ALL_BRANCH_IDS } from "@/lib/seller-map";
-import { Loader2, MapPin, TrendingUp, Package, AlertCircle, ArrowRight } from "lucide-react";
+import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { getBranchBySeller, normalizeBranchName, ALL_BRANCH_IDS } from "@/lib/seller-map";
+import { MapPin, TrendingUp, Package, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { ExportButton } from "@/components/ui/export-button";
+import { fileDateSuffix } from "@/lib/export";
+import { ErrorState } from "@/components/dashboard/error-state";
+import { MicroworkSaleItem } from "@/lib/types-microwork";
+
+import { useUrlFilters } from "@/hooks/use-url-filters";
 
 export default function FiliaisPage() {
-  const { periodo } = useFilterStore();
+  useUrlFilters();
+  const { periodo, allowedSeller, refreshKey } = useFilterStore();
   const [loading, setLoading] = useState(true);
-  const [rawData, setRawData] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [rawData, setRawData] = useState<MicroworkSaleItem[]>([]);
   const [viewMode, setViewMode] = useState<"ranking" | "cards">("cards");
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      const allCompanies = ALL_BRANCH_IDS;
-      const result = await fetchSalesData(periodo.from, periodo.to, allCompanies);
-      if (result && result.rawData) {
-        setRawData(result.rawData);
-      }
+  async function loadData(force = false) {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchSalesData(periodo.from, periodo.to, ALL_BRANCH_IDS, allowedSeller, force);
+      setRawData(result.rawData);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Erro desconhecido.");
+    } finally {
       setLoading(false);
     }
-    loadData();
-  }, [periodo]);
+  }
+
+  useEffect(() => {
+    loadData(refreshKey > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo, allowedSeller, refreshKey]);
 
   // Agrupa dados por filial para os cards de resumo
   const branchesSummary = useMemo(() => {
@@ -122,9 +136,19 @@ export default function FiliaisPage() {
                 placeholder="Buscar filial..."
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
               />
            </div>
+           <ExportButton<{ name: string; qtd: number; total: number }>
+             filename={`filiais-${fileDateSuffix(periodo.from)}`}
+             rows={branchesSummary}
+             label="Exportar"
+             columns={[
+               { header: "Filial", accessor: (r: { name: string; qtd: number; total: number }) => r.name },
+               { header: "Vendas (Qtd)", accessor: (r: { name: string; qtd: number; total: number }) => r.qtd },
+               { header: "Faturamento", accessor: (r: { name: string; qtd: number; total: number }) => formatNumber(r.total, { decimals: 2 }) },
+             ]}
+           />
         </div>
 
         {loading ? (
@@ -133,6 +157,8 @@ export default function FiliaisPage() {
                 <div key={i} className="h-32 bg-muted/50 animate-pulse rounded-xl border border-border/50" />
               ))}
            </div>
+        ) : error ? (
+          <ErrorState message={error} onRetry={loadData} />
         ) : (
           <>
             {viewMode === "cards" ? (

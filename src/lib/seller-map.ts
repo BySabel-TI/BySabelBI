@@ -189,13 +189,73 @@ export const SELLER_MAP: Record<string, string> = {
 };
 
 /**
+ * Normaliza o nome do vendedor para servir de CHAVE de busca.
+ * Preserva "_" e "-1" (que identificam a loja correta da venda).
+ */
+function normalizeSellerKey(sellerName: string): string {
+  return sellerName.trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Override dinâmico carregado do banco (tabela employees).
+ * Chave: nome normalizado do vendedor. Valor: id da filial.
+ * Tem PRIORIDADE sobre o SELLER_MAP estático — permite gerenciar o
+ * vínculo vendedor→filial pelo banco sem editar código.
+ */
+let dynamicSellerMap: Record<string, number> = {};
+
+/**
+ * Substitui o mapa dinâmico pelos vínculos vindos do banco.
+ * Entradas sem branchId (null) são ignoradas.
+ */
+export function setDynamicSellerMap(
+  entries: { name: string; branchId: number | null }[]
+): void {
+  const next: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.name && e.branchId != null) {
+      next[normalizeSellerKey(e.name)] = e.branchId;
+    }
+  }
+  dynamicSellerMap = next;
+}
+
+/** True se já houver dados do banco carregados. */
+export function hasDynamicSellerMap(): boolean {
+  return Object.keys(dynamicSellerMap).length > 0;
+}
+
+/**
  * Tenta encontrar a filial baseada no nome EXATO do vendedor.
+ * 1º) banco (dynamicSellerMap) → 2º) mapa estático (SELLER_MAP / fallback).
  * Não removemos o "_" ou "-1" aqui para não perder a loja correta da venda.
  */
 export function getBranchBySeller(sellerName: string | null): string | null {
   if (!sellerName) return null;
-  const key = sellerName.trim().toUpperCase().replace(/\s+/g, ' ');
+  const key = normalizeSellerKey(sellerName);
+
+  // 1) Banco tem prioridade
+  const dynId = dynamicSellerMap[key];
+  if (dynId != null) {
+    return ID_TO_NORMALIZED_NAME[dynId] || null;
+  }
+
+  // 2) Fallback estático
   return SELLER_MAP[key] || null;
+}
+
+/**
+ * Exporta o mapeamento estático atual como lista {name, branchId} para
+ * importação no banco (botão "Importar mapeamento atual").
+ * Converte o nome da filial do SELLER_MAP em id via normalizeBranchName.
+ */
+export function getStaticSellerEntries(): { name: string; branchId: number | null }[] {
+  return Object.entries(SELLER_MAP).map(([name, branchName]) => {
+    const normalized = normalizeBranchName(branchName); // ex: "01 - Ananindeua"
+    const match = normalized.match(/^(\d+)/);
+    const branchId = match ? parseInt(match[1], 10) : null;
+    return { name, branchId };
+  });
 }
 
 /**

@@ -4,35 +4,45 @@ import { useEffect, useState } from "react";
 // 1. Importamos o Header que contém o filtro de Data Global
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { StockTable } from "@/components/dashboard/stock-table";
+import { ErrorState } from "@/components/dashboard/error-state";
 import { Package, TrendingUp, DollarSign, Trophy, Loader2, CalendarRange } from "lucide-react";
 // 2. Importamos a store para ouvir as datas
 import { useFilterStore } from "@/store/useFilterStore";
 import { fetchSalesData } from "@/services/sales-service";
 import { ALL_BRANCH_IDS } from "@/lib/seller-map";
+import { DashboardData, ModelRanking } from "@/lib/types-microwork";
+
+import { useUrlFilters } from "@/hooks/use-url-filters";
+import { ExportButton } from "@/components/ui/export-button";
+import { fileDateSuffix } from "@/lib/export";
 
 export default function EstoquePage() {
-  // 3. Pegamos o período selecionado no cabeçalho
-  const { periodo, filial } = useFilterStore();
-  const [data, setData] = useState<any>(null);
+  useUrlFilters();
+  const { periodo, filial, allowedSeller, refreshKey } = useFilterStore();
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // 4. Recarregamos os dados sempre que a data (periodo) ou filial mudar
   useEffect(() => {
     async function loadData() {
       setLoading(true);
+      setError(null);
       try {
-        const ids = filial === 'all' 
-          ? ALL_BRANCH_IDS 
+        const ids = filial === 'all'
+          ? ALL_BRANCH_IDS
           : [parseInt(filial.replace(/\D/g, '')) || 1];
-        
-        // A busca obedece estritamente ao range de datas selecionado
-        const result = await fetchSalesData(periodo.from, periodo.to, ids);
+
+        const isForce = refreshKey > 0;
+        const result = await fetchSalesData(periodo.from, periodo.to, ids, allowedSeller, isForce);
         setData(result);
-      } catch (error) { console.error(error); } 
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Erro desconhecido.");
+      }
       finally { setLoading(false); }
     }
     loadData();
-  }, [periodo, filial]);
+  }, [periodo, filial, allowedSeller, refreshKey]);
 
   const fmtBRL = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
@@ -44,7 +54,7 @@ export default function EstoquePage() {
       <DashboardHeader />
 
       <div className="space-y-8 mt-6">
-        {/* Cabeçalho da Seção (Visual que você gostou) */}
+        {/* Cabeçalho da Seção */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/30 p-6 rounded-xl border border-border/50">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
@@ -60,20 +70,43 @@ export default function EstoquePage() {
           </div>
           
           <div className="flex gap-2">
-             {/* Botão decorativo (futura implementação de entrada manual) */}
-            <button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-border cursor-not-allowed opacity-50">
-               + Nova Entrada
-            </button>
+            <ExportButton<ModelRanking>
+              filename={`giro_estoque_${fileDateSuffix()}`}
+              rows={data?.rankingModelos || []}
+              columns={[
+                { header: "Modelo", accessor: (row: ModelRanking) => row.name },
+                { header: "Qtd. Vendida", accessor: (row: ModelRanking) => row.qtd },
+                { header: "Valor Total (R$)", accessor: (row: ModelRanking) => row.valor },
+              ]}
+              label="Exportar Giro"
+            />
           </div>
         </div>
 
         {loading && (
-          <div className="h-[400px] flex items-center justify-center">
+          <div className="h-100 flex items-center justify-center">
             <Loader2 className="animate-spin text-shineray-red" size={48} />
           </div>
         )}
 
-        {!loading && data && (
+        {!loading && error && (
+          <ErrorState
+            message={error}
+            onRetry={() => {
+              const ids = filial === 'all'
+                ? ALL_BRANCH_IDS
+                : [parseInt(filial.replace(/\D/g, '')) || 1];
+              setLoading(true);
+              setError(null);
+              fetchSalesData(periodo.from, periodo.to, ids, allowedSeller, true)
+                .then(setData)
+                .catch((err) => setError(err instanceof Error ? err.message : "Erro desconhecido."))
+                .finally(() => setLoading(false));
+            }}
+          />
+        )}
+
+        {!loading && !error && data && (
           <>
             {/* Cards de Resumo (Baseados no Período Selecionado) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
